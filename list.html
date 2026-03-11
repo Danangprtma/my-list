@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultimate Media Tracker</title>
+<style>
+body{font-family:system-ui,Arial;background:#0f172a;color:#e5e7eb;margin:0;display:flex;justify-content:center}
+.container{width:1100px;padding:25px}
+h1{text-align:center;margin-bottom:10px}
+.stats{display:flex;gap:10px;justify-content:center;margin-bottom:20px;font-size:13px;color:#cbd5f5}
+form{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px}
+input,select,button{padding:10px;border-radius:10px;border:none;font-size:14px}
+input,select{background:#1e293b;color:white}
+button{background:#6366f1;color:white;cursor:pointer}
+button:hover{opacity:.9}
+.toolbar{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap}
+.toolbar input{flex:1}
+.card{display:flex;gap:15px;align-items:center;background:#1e293b;padding:12px;border-radius:12px;margin-bottom:10px}
+.cover{width:60px;height:80px;background:#334155;border-radius:8px;object-fit:cover}
+.info{flex:1}
+.title{font-weight:bold}
+.meta{font-size:12px;color:#cbd5f5}
+.progressbar{height:6px;background:#334155;border-radius:10px;margin-top:6px;overflow:hidden}
+.progress{height:100%;background:#22c55e}
+.actions{display:flex;gap:6px}
+.small{padding:6px 8px;font-size:12px}
+.delete{background:#ef4444}
+.edit{background:#22c55e}
+.rate{background:#eab308}
+a{color:#93c5fd;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>📚 Ultimate Anime & Reading Tracker</h1>
+
+<div class="stats" id="stats"></div>
+
+<form id="mediaForm">
+<input id="title" placeholder="Judul" required>
+<select id="type">
+<option>Anime</option>
+<option>Donghua</option>
+<option>Manga</option>
+<option>Manhwa</option>
+<option>Manhua</option>
+<option>Novel</option>
+</select>
+
+<input id="link" placeholder="Link (opsional)">
+<select id="status">
+<option>Watching / Reading</option>
+<option>Completed</option>
+<option>Plan to Start</option>
+</select>
+
+<select id="readstate">
+<option value="Belum Dibaca">Belum Dibaca</option>
+<option value="Sudah Dibaca">Sudah Dibaca</option>
+</select>
+
+<input id="chapter" placeholder="Episode / Chapter terakhir">
+<input id="total" placeholder="Total Episode / Chapter (opsional)">
+
+<input id="cover" placeholder="Link Cover Image (opsional)">
+<input id="rating" placeholder="Rating 1-10 (opsional)">
+
+<button type="submit" style="grid-column:span 2">Tambah ke List</button>
+</form>
+
+<div class="toolbar">
+<input id="search" placeholder="Cari judul...">
+
+<select id="filter">
+<option value="all">Semua Status</option>
+<option value="Watching / Reading">Watching / Reading</option>
+<option value="Completed">Completed</option>
+<option value="Plan to Start">Plan to Start</option>
+</select>
+
+<select id="readFilter">
+<option value="all">Semua (Baca)</option>
+<option value="Sudah Dibaca">Sudah Dibaca</option>
+<option value="Belum Dibaca">Belum Dibaca</option>
+</select>
+
+<select id="sort">
+<option value="new">Terbaru</option>
+<option value="az">A-Z</option>
+<option value="progress">Progress</option>
+</select>
+
+<button onclick="exportData()" class="small">Export</button>
+<input type="file" id="importFile" style="display:none">
+<button onclick="document.getElementById('importFile').click()" class="small">Import</button>
+</div>
+
+<div id="list"></div>
+
+</div>
+
+<script>
+const form=document.getElementById('mediaForm');
+const list=document.getElementById('list');
+const search=document.getElementById('search');
+const filter=document.getElementById('filter');
+const sort=document.getElementById('sort');
+const readFilter=document.getElementById('readFilter');
+const stats=document.getElementById('stats');
+
+let data=JSON.parse(localStorage.getItem('mediaTracker')||'[]');
+
+function save(){
+localStorage.setItem('mediaTracker',JSON.stringify(data));
+}
+
+function progressPercent(item){
+let c=parseFloat(item.chapter)||0;
+let t=parseFloat(item.total)||0;
+if(!t) return 0;
+return Math.min(100,(c/t)*100);
+}
+
+function updateStats(){
+let total=data.length;
+let anime=data.filter(x=>x.type==='Anime').length;
+let manga=data.filter(x=>x.type==='Manga').length;
+let reading=data.filter(x=>x.status==='Watching / Reading').length;
+
+stats.innerHTML=`Total: ${total} • Anime: ${anime} • Manga: ${manga} • Active: ${reading}`;
+}
+
+function render(){
+list.innerHTML='';
+
+let keyword=search.value.toLowerCase();
+let statusFilter=filter.value;
+
+let readStateFilter=readFilter.value;
+
+let filtered=data.filter(item=>{
+let matchTitle=item.title.toLowerCase().includes(keyword);
+let matchStatus=statusFilter==='all'||item.status===statusFilter;
+let matchRead=readStateFilter==='all'||item.readstate===readStateFilter;
+return matchTitle && matchStatus && matchRead;
+});
+
+if(sort.value==='az'){
+filtered.sort((a,b)=>a.title.localeCompare(b.title));
+}
+
+if(sort.value==='new'){
+filtered.sort((a,b)=>b.created-a.created);
+}
+
+if(sort.value==='progress'){
+filtered.sort((a,b)=>progressPercent(b)-progressPercent(a));
+}
+
+filtered.forEach((item,index)=>{
+const card=document.createElement('div');
+card.className='card';
+
+const cover=document.createElement('img');
+cover.className='cover';
+cover.src=item.cover||'';
+
+const info=document.createElement('div');
+info.className='info';
+
+let linkHTML=item.link?`<a href="${item.link}" target="_blank">Buka Link</a>`:'';
+
+let percent=progressPercent(item);
+
+info.innerHTML=`
+<div class="title">${item.title}</div>
+<div class="meta">${item.type} • ${item.status} • ${item.readstate||'Belum Dibaca'} • ⭐ ${item.rating||'-'}</div>
+<div class="meta">Progress: ${item.chapter||0}/${item.total||'?'} </div>
+<div class="progressbar"><div class="progress" style="width:${percent}%"></div></div>
+${linkHTML}
+`;
+
+const actions=document.createElement('div');
+actions.className='actions';
+
+const edit=document.createElement('button');
+edit.textContent='Update';
+edit.className='small edit';
+edit.onclick=()=>{
+let prog=prompt('Update chapter / episode:',item.chapter||'');
+if(prog!==null){
+item.chapter=prog;
+save();
+render();
+}
+};
+
+const rate=document.createElement('button');
+rate.textContent='Rate';
+rate.className='small rate';
+rate.onclick=()=>{
+let r=prompt('Rating 1-10',item.rating||'');
+if(r!==null){
+item.rating=r;
+save();
+render();
+}
+};
+
+const del=document.createElement('button');
+del.textContent='Hapus';
+del.className='small delete';
+del.onclick=()=>{
+data.splice(data.indexOf(item),1);
+save();
+render();
+};
+
+actions.appendChild(edit);
+actions.appendChild(rate);
+actions.appendChild(del);
+
+card.appendChild(cover);
+card.appendChild(info);
+card.appendChild(actions);
+
+list.appendChild(card);
+});
+
+updateStats();
+}
+
+form.addEventListener('submit',e=>{
+e.preventDefault();
+
+let item={
+ readstate:readstate.value,
+ title:title.value,
+ type:type.value,
+ link:link.value,
+ status:status.value,
+ chapter:chapter.value,
+ total:total.value,
+ cover:cover.value,
+ rating:rating.value,
+ created:Date.now()
+};
+
+data.push(item);
+save();
+render();
+form.reset();
+});
+
+search.oninput=render;
+filter.onchange=render;
+readFilter.onchange=render;
+sort.onchange=render;
+
+function exportData(){
+let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+let a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download='media-tracker-backup.json';
+a.click();
+}
+
+importFile.addEventListener('change',function(){
+let file=this.files[0];
+if(!file)return;
+let reader=new FileReader();
+reader.onload=function(){
+try{
+let imported=JSON.parse(reader.result);
+if(Array.isArray(imported)){
+data=imported;
+save();
+render();
+}
+}catch{}
+};
+reader.readAsText(file);
+});
+
+render();
+</script>
+
+</body>
+</html>
